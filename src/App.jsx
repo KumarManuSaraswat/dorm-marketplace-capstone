@@ -1,122 +1,129 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useState, useEffect, useCallback } from 'react';
+import { formatDistanceToNow } from 'date-fns';
+import ItemList from './components/ItemList';
+import AddItemForm from './components/AddItemForm';
+import './App.css';
+
+const ITEMS_KEY = 'dorm-marketplace-items';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [items, setItems] = useState([]);
+  const [activeView, setActiveView] = useState('browse'); // 'browse' or 'seller'
+
+  // Load items from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem(ITEMS_KEY);
+    if (saved) {
+      setItems(JSON.parse(saved));
+    }
+  }, []);
+
+  // Persist items to localStorage
+  useEffect(() => {
+    localStorage.setItem(ITEMS_KEY, JSON.stringify(items));
+  }, [items]);
+
+  // Check for expired claims every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setItems(prevItems => 
+        prevItems.map(item => {
+          if (item.status === 'claimed' && item.claimExpiresAt) {
+            const now = new Date();
+            if (now > new Date(item.claimExpiresAt)) {
+              return { ...item, status: 'available', claimedBy: null, claimExpiresAt: null };
+            }
+          }
+          return item;
+        })
+      );
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const addItem = (newItem) => {
+    const item = {
+      id: Date.now().toString(),
+      ...newItem,
+      status: 'available',
+      createdAt: new Date().toISOString(),
+    };
+    setItems(prev => [item, ...prev]);
+  };
+
+  const claimItem = useCallback((itemId) => {
+    setItems(prev => prev.map(item => {
+      // Atomic claim - only claim if still available (handles concurrency)
+      if (item.id === itemId && item.status === 'available') {
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
+        return {
+          ...item,
+          status: 'claimed',
+          claimedBy: `Student ${Math.floor(Math.random() * 1000)}`, // Mock user
+          claimExpiresAt: expiresAt,
+        };
+      }
+      return item;
+    }));
+  }, []);
+
+  const completeItem = (itemId) => {
+    setItems(prev => prev.filter(item => item.id !== itemId));
+  };
+
+  const markSold = (itemId) => {
+    setItems(prev => prev.filter(item => item.id !== itemId));
+  };
+
+  const availableItems = items.filter(item => item.status === 'available');
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="app">
+      <header className="header">
+        <h1>🏠 Dorm Marketplace</h1>
+        <nav className="nav">
+          <button 
+            className={activeView === 'browse' ? 'active' : ''}
+            onClick={() => setActiveView('browse')}
+          >
+            Browse Items ({availableItems.length})
+          </button>
+          <button 
+            className={activeView === 'seller' ? 'active' : ''}
+            onClick={() => setActiveView('seller')}
+          >
+            Sell Item
+          </button>
+        </nav>
+      </header>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      <main className="main">
+        {activeView === 'browse' ? (
+          <div className="browse-view">
+            <ItemList 
+              items={availableItems}
+              onClaim={claimItem}
+              onComplete={completeItem}
+              onMarkSold={markSold}
+              isBuyerView={true}
+            />
+          </div>
+        ) : (
+          <div className="seller-view">
+            <AddItemForm onAddItem={addItem} />
+            <ItemList 
+              items={items}
+              onClaim={claimItem}
+              onComplete={completeItem}
+              onMarkSold={markSold}
+              isBuyerView={false}
+            />
+          </div>
+        )}
+      </main>
+    </div>
+  );
 }
 
-export default App
+export default App;
